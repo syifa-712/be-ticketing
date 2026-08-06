@@ -7,11 +7,107 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+enum Category {
+  technical
+  billing
+  account
+  feature_request
+  other
+}
+
+enum Priority {
+  low
+  medium
+  high
+  urgent
+}
+
+enum Status {
+  new
+  in_progress
+  waiting_reply
+  escalated
+  resolved
+  closed
+}
+
+enum Source {
+  email
+  chat
+  phone
+  webform
+}
+
+enum ActivityType {
+  comment
+  status_change
+  escalation
+  resolution
+  reopen
+}
+
+enum Role {
+  agent
+  admin
+}
+
+model User {
+  id           String   @id @default(uuid()) @db.Uuid
+  name         String
+  email        String   @unique
+  passwordHash String
+  role         Role
+  tier         Int
+
+  assignedTickets Ticket[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
 model Ticket {
-  id          Int      @id @default(autoincrement())
-  title       String
-  description String?
-  status      String   @default("OPEN")
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id                 String   @id @default(uuid()) @db.Uuid
+  ticketNumber       String   @unique
+
+  subject            String
+  description        String
+
+  category           Category
+  priority           Priority
+  status             Status   @default(new)
+
+  tier               Int      @default(1)
+
+  requesterName      String
+  requesterEmail     String
+
+  assignedToId       String?  @db.Uuid
+  assignedTo         User?    @relation(fields: [assignedToId], references: [id])
+
+  source             Source
+
+  resolutionNote     String?
+  escalationReason   String?
+
+  satisfactionRating Int?
+
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+  resolvedAt         DateTime?
+  closedAt           DateTime?
+
+  activities         TicketActivity[]
+}
+
+model TicketActivity {
+  id        String       @id @default(uuid()) @db.Uuid
+
+  ticketId  String       @db.Uuid
+  ticket    Ticket       @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+
+  type      ActivityType
+  actor     String
+  content   String
+
+  createdAt DateTime @default(now())
 }
