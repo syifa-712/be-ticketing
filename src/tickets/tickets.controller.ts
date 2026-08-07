@@ -13,6 +13,7 @@ import { TicketsService } from './tickets.service';
 import { CreateTicketDto } from './dto/create-ticket.dto';
 import { UpdateTicketDto } from './dto/update-ticket.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth/jwt-auth.guard';
+import { AssignTicketDto } from './dto/assign-ticket.dto';
 
 @Controller('tickets')
 export class TicketsController {
@@ -66,6 +67,14 @@ export class TicketsController {
     return this.ticketsService.update(id, updateTicketDto);
   }
 
+  @UseGuards(JwtAuthGuard)
+@Patch(':id/assign')
+assign(
+  @Param('id') id: string,
+  @Body() assignTicketDto: AssignTicketDto,
+) {
+  return this.ticketsService.assign(id, assignTicketDto);
+}
   @UseGuards(JwtAuthGuard)
   @Delete(':id')
   remove(@Param('id') id: string) {

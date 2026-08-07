@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateTicketDto } from './dto/create-ticket.dto';
 import { UpdateTicketDto } from './dto/update-ticket.dto';
+import { AssignTicketDto } from './dto/assign-ticket.dto';
 
 @Injectable()
 export class TicketsService {
@@ -104,18 +105,28 @@ export class TicketsService {
     });
   }
 
-  update(id: string, updateTicketDto: UpdateTicketDto) {
-    return this.prisma.ticket.update({
-      where: { id },
-      data: updateTicketDto,
-    });
-  }
+ update(id: string, updateTicketDto: UpdateTicketDto) {
+  return this.prisma.ticket.update({
+    where: { id },
+    data: updateTicketDto,
+  });
+}
 
-  remove(id: string) {
-    return this.prisma.ticket.delete({
-      where: { id },
-    });
-  }
+async assign(id: string, assignTicketDto: AssignTicketDto) {
+  return this.prisma.ticket.update({
+    where: { id },
+    data: {
+      assignedToId: assignTicketDto.assignedToId,
+      status: 'in_progress',
+    },
+  });
+}
+
+remove(id: string) {
+  return this.prisma.ticket.delete({
+    where: { id },
+  });
+}
 
   async track(ticketNumber: string, requesterEmail: string) {
     const ticket = await this.prisma.ticket.findFirst({
