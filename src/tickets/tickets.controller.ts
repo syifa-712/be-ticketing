@@ -14,6 +14,8 @@ import { CreateTicketDto } from './dto/create-ticket.dto';
 import { UpdateTicketDto } from './dto/update-ticket.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth/jwt-auth.guard';
 import { AssignTicketDto } from './dto/assign-ticket.dto';
+import { EscalateTicketDto } from './dto/escalate-ticket.dto';
+import { ResolveTicketDto } from './dto/resolve-ticket.dto';
 
 @Controller('tickets')
 export class TicketsController {
@@ -75,6 +77,25 @@ assign(
 ) {
   return this.ticketsService.assign(id, assignTicketDto);
 }
+
+@UseGuards(JwtAuthGuard)
+@Post(':id/escalate')
+escalate(
+  @Param('id') id: string,
+  @Body() escalateTicketDto: EscalateTicketDto,
+) {
+  return this.ticketsService.escalate(id, escalateTicketDto);
+}
+
+@UseGuards(JwtAuthGuard)
+@Post(':id/resolve')
+resolve(
+  @Param('id') id: string,
+  @Body() resolveTicketDto: ResolveTicketDto,
+) {
+  return this.ticketsService.resolve(id, resolveTicketDto);
+}
+
   @UseGuards(JwtAuthGuard)
   @Delete(':id')
   remove(@Param('id') id: string) {

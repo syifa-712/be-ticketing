@@ -2,5 +2,5 @@ import { IsUUID } from 'class-validator';
 
 export class AssignTicketDto {
   @IsUUID()
-  assignedToId!: string;
+  assigned_to!: string;
 }

@@ -3,7 +3,9 @@ import { PrismaService } from '../prisma/prisma.service';
 import { CreateTicketDto } from './dto/create-ticket.dto';
 import { UpdateTicketDto } from './dto/update-ticket.dto';
 import { AssignTicketDto } from './dto/assign-ticket.dto';
-
+import { EscalateTicketDto } from './dto/escalate-ticket.dto';
+import { ResolveTicketDto } from './dto/resolve-ticket.dto';
+import { ReopenTicketDto } from './dto/reopen-ticket.dto';
 @Injectable()
 export class TicketsService {
   constructor(private prisma: PrismaService) {}
@@ -105,28 +107,90 @@ export class TicketsService {
     });
   }
 
- update(id: string, updateTicketDto: UpdateTicketDto) {
-  return this.prisma.ticket.update({
-    where: { id },
-    data: updateTicketDto,
-  });
-}
+  update(id: string, updateTicketDto: UpdateTicketDto) {
+    return this.prisma.ticket.update({
+      where: { id },
+      data: updateTicketDto,
+    });
+  }
 
-async assign(id: string, assignTicketDto: AssignTicketDto) {
-  return this.prisma.ticket.update({
+  async assign(id: string, assignTicketDto: AssignTicketDto) {
+    return this.prisma.ticket.update({
+      where: { id },
+      data: {
+        assignedToId: assignTicketDto.assigned_to,
+        status: 'in_progress',
+      },
+    });
+  }
+
+  async escalate(id: string, escalateTicketDto: EscalateTicketDto) {
+  const ticket = await this.prisma.ticket.update({
     where: { id },
     data: {
-      assignedToId: assignTicketDto.assignedToId,
+      tier: escalateTicketDto.target_tier,
+      status: 'escalated',
+      escalationReason: escalateTicketDto.reason,
+    },
+  });
+
+  await this.prisma.ticketActivity.create({
+    data: {
+      ticketId: id,
+      type: 'escalation',
+      actor: 'system',
+      content: escalateTicketDto.reason,
+    },
+  });
+
+  return ticket;
+}
+async resolve(id: string, resolveTicketDto: ResolveTicketDto) {
+  const ticket = await this.prisma.ticket.update({
+    where: { id },
+    data: {
+      status: 'resolved',
+      resolutionNote: resolveTicketDto.resolution_note,
+      resolvedAt: new Date(),
+    },
+  });
+
+  await this.prisma.ticketActivity.create({
+    data: {
+      ticketId: id,
+      type: 'resolution',
+      actor: 'system',
+      content: resolveTicketDto.resolution_note,
+    },
+  });
+
+  return ticket;
+}
+async reopen(id: string, reopenTicketDto: ReopenTicketDto) {
+  const ticket = await this.prisma.ticket.update({
+    where: { id },
+    data: {
       status: 'in_progress',
     },
   });
+
+  await this.prisma.ticketActivity.create({
+    data: {
+      ticketId: id,
+      type: 'reopen',
+      actor: 'requester',
+      content: reopenTicketDto.reason,
+    },
+  });
+
+  return ticket;
 }
 
-remove(id: string) {
-  return this.prisma.ticket.delete({
-    where: { id },
-  });
-}
+  remove(id: string) {
+    return this.prisma.ticket.delete({
+      where: { id },
+    });
+  }
 
   async track(ticketNumber: string, requesterEmail: string) {
     const ticket = await this.prisma.ticket.findFirst({
