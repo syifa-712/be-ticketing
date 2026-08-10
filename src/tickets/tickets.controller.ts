@@ -12,6 +12,7 @@ import {
 import { TicketsService } from './tickets.service';
 import { CreateTicketDto } from './dto/create-ticket.dto';
 import { UpdateTicketDto } from './dto/update-ticket.dto';
+import { SubmitSatisfactionDto } from './dto/submit-satisfaction.dto';
 import { JwtAuthGuard } from '../auth/jwt-auth/jwt-auth.guard';
 
 @Controller('tickets')
@@ -21,6 +22,14 @@ export class TicketsController {
   @Post()
   create(@Body() createTicketDto: CreateTicketDto) {
     return this.ticketsService.create(createTicketDto);
+  }
+
+  @Post(':id/satisfaction')
+  submitSatisfaction(
+    @Param('id') id: string,
+    @Body() submitSatisfactionDto: SubmitSatisfactionDto,
+  ) {
+    return this.ticketsService.submitSatisfaction(id, submitSatisfactionDto);
   }
 
   @UseGuards(JwtAuthGuard)
@@ -52,6 +61,12 @@ export class TicketsController {
   }
 
   @UseGuards(JwtAuthGuard)
+  @Get(':id/sla')
+  getSla(@Param('id') id: string) {
+    return this.ticketsService.getSla(id);
+  }
+
+  @UseGuards(JwtAuthGuard)
   @Get(':id')
   findOne(@Param('id') id: string) {
     return this.ticketsService.findOne(id);
@@ -59,10 +74,7 @@ export class TicketsController {
 
   @UseGuards(JwtAuthGuard)
   @Patch(':id')
-  update(
-    @Param('id') id: string,
-    @Body() updateTicketDto: UpdateTicketDto,
-  ) {
+  update(@Param('id') id: string, @Body() updateTicketDto: UpdateTicketDto) {
     return this.ticketsService.update(id, updateTicketDto);
   }
 
