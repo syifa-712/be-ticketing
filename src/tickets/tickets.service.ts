@@ -1,6 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { Priority } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
+import { MailService } from '../mail/mail.service';
 import { CreateTicketDto } from './dto/create-ticket.dto';
 import { UpdateTicketDto } from './dto/update-ticket.dto';
 import { SubmitSatisfactionDto } from './dto/submit-satisfaction.dto';
@@ -35,7 +36,10 @@ export class TicketsService {
       resolution: { businessDays: 5 },
     },
   };
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private mailService: MailService,
+  ) {}
 
   async create(createTicketDto: CreateTicketDto) {
     const now = new Date();
@@ -55,6 +59,8 @@ export class TicketsService {
         ticketNumber,
       },
     });
+
+    await this.mailService.sendTicketCreated(ticket);
 
     return {
       ticket_number: ticket.ticketNumber,
@@ -127,11 +133,46 @@ export class TicketsService {
     });
   }
 
-  update(id: string, updateTicketDto: UpdateTicketDto) {
-    return this.prisma.ticket.update({
+  async update(id: string, updateTicketDto: UpdateTicketDto) {
+    const existing = await this.prisma.ticket.findUnique({
+      where: { id },
+    });
+
+    if (!existing) {
+      throw new NotFoundException('Ticket tidak ditemukan');
+    }
+
+    const ticket = await this.prisma.ticket.update({
       where: { id },
       data: updateTicketDto,
     });
+
+    if (updateTicketDto.status && updateTicketDto.status !== existing.status) {
+      await this.mailService.sendTicketStatusUpdated(ticket, existing.status);
+    }
+
+    if (
+      updateTicketDto.tier !== undefined &&
+      updateTicketDto.tier !== existing.tier
+    ) {
+      const agents = await this.prisma.user.findMany({
+        where: {
+          role: 'agent',
+          tier: updateTicketDto.tier,
+        },
+        select: {
+          email: true,
+        },
+      });
+
+      await this.mailService.sendTicketEscalated(
+        ticket,
+        existing.tier,
+        agents.map((agent) => agent.email),
+      );
+    }
+
+    return ticket;
   }
 
   remove(id: string) {
