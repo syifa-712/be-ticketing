@@ -6,6 +6,7 @@ import { AssignTicketDto } from './dto/assign-ticket.dto';
 import { EscalateTicketDto } from './dto/escalate-ticket.dto';
 import { ResolveTicketDto } from './dto/resolve-ticket.dto';
 import { ReopenTicketDto } from './dto/reopen-ticket.dto';
+import { CreateCommentDto } from './dto/create-comment.dto';
 @Injectable()
 export class TicketsService {
   constructor(private prisma: PrismaService) {}
@@ -185,7 +186,16 @@ async reopen(id: string, reopenTicketDto: ReopenTicketDto) {
 
   return ticket;
 }
-
+async addComment(id: string, createCommentDto: CreateCommentDto) {
+  return this.prisma.ticketActivity.create({
+    data: {
+      ticketId: id,
+      type: 'comment',
+      actor: createCommentDto.actor,
+      content: createCommentDto.content,
+    },
+  });
+}
   remove(id: string) {
     return this.prisma.ticket.delete({
       where: { id },

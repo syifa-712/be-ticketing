@@ -16,6 +16,8 @@ import { JwtAuthGuard } from '../auth/jwt-auth/jwt-auth.guard';
 import { AssignTicketDto } from './dto/assign-ticket.dto';
 import { EscalateTicketDto } from './dto/escalate-ticket.dto';
 import { ResolveTicketDto } from './dto/resolve-ticket.dto';
+import { ReopenTicketDto } from './dto/reopen-ticket.dto';
+import { CreateCommentDto } from './dto/create-comment.dto';
 
 @Controller('tickets')
 export class TicketsController {
@@ -94,6 +96,22 @@ resolve(
   @Body() resolveTicketDto: ResolveTicketDto,
 ) {
   return this.ticketsService.resolve(id, resolveTicketDto);
+}
+
+@Post(':id/reopen')
+reopen(
+  @Param('id') id: string,
+  @Body() reopenTicketDto: ReopenTicketDto,
+) {
+  return this.ticketsService.reopen(id, reopenTicketDto);
+}
+
+@Post(':id/comments')
+addComment(
+  @Param('id') id: string,
+  @Body() createCommentDto: CreateCommentDto,
+) {
+  return this.ticketsService.addComment(id, createCommentDto);
 }
 
   @UseGuards(JwtAuthGuard)
