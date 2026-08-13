@@ -47,6 +47,7 @@ enum ActivityType {
 }
 
 enum Role {
+  user
   agent
   admin
 }

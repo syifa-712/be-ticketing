@@ -6,6 +6,11 @@ import { SlaService } from '../sla/sla.service';
 import { CreateTicketDto } from './dto/create-ticket.dto';
 import { UpdateTicketDto } from './dto/update-ticket.dto';
 import { SubmitSatisfactionDto } from './dto/submit-satisfaction.dto';
+import { AssignTicketDto } from './dto/assign-ticket.dto';
+import { EscalateTicketDto } from './dto/escalate-ticket.dto';
+import { ResolveTicketDto } from './dto/resolve-ticket.dto';
+import { ReopenTicketDto } from './dto/reopen-ticket.dto';
+import { CreateCommentDto } from './dto/create-comment.dto';
 
 @Injectable()
 export class TicketsService {
@@ -159,6 +164,87 @@ export class TicketsService {
     return ticket;
   }
 
+  async assign(id: string, assignTicketDto: AssignTicketDto) {
+    return this.prisma.ticket.update({
+      where: { id },
+      data: {
+        assignedToId: assignTicketDto.assigned_to,
+        status: 'in_progress',
+      },
+    });
+  }
+
+  async escalate(id: string, escalateTicketDto: EscalateTicketDto) {
+  const ticket = await this.prisma.ticket.update({
+    where: { id },
+    data: {
+      tier: escalateTicketDto.target_tier,
+      status: 'escalated',
+      escalationReason: escalateTicketDto.reason,
+    },
+  });
+
+  await this.prisma.ticketActivity.create({
+    data: {
+      ticketId: id,
+      type: 'escalation',
+      actor: 'system',
+      content: escalateTicketDto.reason,
+    },
+  });
+
+  return ticket;
+}
+async resolve(id: string, resolveTicketDto: ResolveTicketDto) {
+  const ticket = await this.prisma.ticket.update({
+    where: { id },
+    data: {
+      status: 'resolved',
+      resolutionNote: resolveTicketDto.resolution_note,
+      resolvedAt: new Date(),
+    },
+  });
+
+  await this.prisma.ticketActivity.create({
+    data: {
+      ticketId: id,
+      type: 'resolution',
+      actor: 'system',
+      content: resolveTicketDto.resolution_note,
+    },
+  });
+
+  return ticket;
+}
+async reopen(id: string, reopenTicketDto: ReopenTicketDto) {
+  const ticket = await this.prisma.ticket.update({
+    where: { id },
+    data: {
+      status: 'in_progress',
+    },
+  });
+
+  await this.prisma.ticketActivity.create({
+    data: {
+      ticketId: id,
+      type: 'reopen',
+      actor: 'requester',
+      content: reopenTicketDto.reason,
+    },
+  });
+
+  return ticket;
+}
+async addComment(id: string, createCommentDto: CreateCommentDto) {
+  return this.prisma.ticketActivity.create({
+    data: {
+      ticketId: id,
+      type: 'comment',
+      actor: createCommentDto.actor,
+      content: createCommentDto.content,
+    },
+  });
+}
   remove(id: string) {
     return this.prisma.ticket.delete({
       where: { id },
