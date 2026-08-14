@@ -53,9 +53,9 @@ enum Role {
 }
 
 model User {
-  id           String   @id @default(uuid()) @db.Uuid
+  id           String @id @default(uuid()) @db.Uuid
   name         String
-  email        String   @unique
+  email        String @unique
   passwordHash String
   role         Role
   tier         Int
@@ -67,50 +67,71 @@ model User {
 }
 
 model Ticket {
-  id                 String   @id @default(uuid()) @db.Uuid
-  ticketNumber       String   @unique
+  id           String @id @default(uuid()) @db.Uuid
+  ticketNumber String @unique
 
-  subject            String
-  description        String
+  subject     String
+  description String
 
-  category           Category
-  priority           Priority
-  status             Status   @default(new)
+  category Category
+  priority Priority
+  status   Status   @default(new)
 
-  tier               Int      @default(1)
+  tier Int @default(1)
 
-  requesterName      String
-  requesterEmail     String
+  requesterName  String
+  requesterEmail String
 
-  assignedToId       String?  @db.Uuid
-  assignedTo         User?    @relation(fields: [assignedToId], references: [id])
+  assignedToId String? @db.Uuid
+  assignedTo   User?   @relation(fields: [assignedToId], references: [id])
 
-  source             Source
+  source Source
 
-  resolutionNote     String?
-  escalationReason   String?
+  resolutionNote   String?
+  escalationReason String?
 
   satisfactionRating Int?
 
   slaBreached Boolean @default(false)
 
-  createdAt          DateTime @default(now())
-  updatedAt          DateTime @updatedAt
-  resolvedAt         DateTime?
-  closedAt           DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+  resolvedAt DateTime?
+  closedAt   DateTime?
 
-  activities         TicketActivity[]
+  activities TicketActivity[]
+  messages   TicketMessage[]
 }
 
 model TicketActivity {
-  id        String       @id @default(uuid()) @db.Uuid
+  id String @id @default(uuid()) @db.Uuid
 
-  ticketId  String       @db.Uuid
-  ticket    Ticket       @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+  ticketId String @db.Uuid
+  ticket   Ticket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
 
-  type      ActivityType
-  actor     String
-  content   String
+  type    ActivityType
+  actor   String
+  content String
 
   createdAt DateTime @default(now())
+}
+
+model TicketMessage {
+  id          String   @id @default(cuid())
+  ticketId    String   @db.Uuid
+  senderId    String   @db.Uuid
+  senderRole  String
+  senderName  String
+  senderEmail String?
+  message     String   @db.Text
+  isRead      Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  ticket Ticket @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+
+  @@index([ticketId])
+  @@index([createdAt])
+  @@index([senderRole])
+  @@map("ticket_messages")
 }

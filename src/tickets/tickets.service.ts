@@ -3,6 +3,7 @@ import { Prisma, Status } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { MailService } from '../mail/mail.service';
 import { SlaService } from '../sla/sla.service';
+
 import { CreateTicketDto } from './dto/create-ticket.dto';
 import { UpdateTicketDto } from './dto/update-ticket.dto';
 import { SubmitSatisfactionDto } from './dto/submit-satisfaction.dto';
@@ -11,6 +12,12 @@ import { EscalateTicketDto } from './dto/escalate-ticket.dto';
 import { ResolveTicketDto } from './dto/resolve-ticket.dto';
 import { ReopenTicketDto } from './dto/reopen-ticket.dto';
 import { CreateCommentDto } from './dto/create-comment.dto';
+
+import {
+  CreateTicketMessageDto,
+  TicketMessageResponseDto,
+  TicketConversationResponseDto,
+} from './dto/ticket-message.dto';
 
 @Injectable()
 export class TicketsService {
@@ -137,7 +144,10 @@ export class TicketsService {
     });
 
     if (updateTicketDto.status && updateTicketDto.status !== existing.status) {
-      await this.mailService.sendTicketStatusUpdated(ticket, existing.status);
+      await this.mailService.sendTicketStatusUpdated(
+        ticket,
+        existing.status,
+      );
     }
 
     if (
@@ -175,76 +185,292 @@ export class TicketsService {
   }
 
   async escalate(id: string, escalateTicketDto: EscalateTicketDto) {
-  const ticket = await this.prisma.ticket.update({
-    where: { id },
-    data: {
-      tier: escalateTicketDto.target_tier,
-      status: 'escalated',
-      escalationReason: escalateTicketDto.reason,
-    },
-  });
+    const ticket = await this.prisma.ticket.update({
+      where: { id },
+      data: {
+        tier: escalateTicketDto.target_tier,
+        status: 'escalated',
+        escalationReason: escalateTicketDto.reason,
+      },
+    });
 
-  await this.prisma.ticketActivity.create({
-    data: {
-      ticketId: id,
-      type: 'escalation',
-      actor: 'system',
-      content: escalateTicketDto.reason,
-    },
-  });
+    await this.prisma.ticketActivity.create({
+      data: {
+        ticketId: id,
+        type: 'escalation',
+        actor: 'system',
+        content: escalateTicketDto.reason,
+      },
+    });
 
-  return ticket;
-}
-async resolve(id: string, resolveTicketDto: ResolveTicketDto) {
-  const ticket = await this.prisma.ticket.update({
-    where: { id },
-    data: {
-      status: 'resolved',
-      resolutionNote: resolveTicketDto.resolution_note,
-      resolvedAt: new Date(),
-    },
-  });
+    return ticket;
+  }
 
-  await this.prisma.ticketActivity.create({
-    data: {
-      ticketId: id,
-      type: 'resolution',
-      actor: 'system',
-      content: resolveTicketDto.resolution_note,
-    },
-  });
+  async resolve(id: string, resolveTicketDto: ResolveTicketDto) {
+    const ticket = await this.prisma.ticket.update({
+      where: { id },
+      data: {
+        status: 'resolved',
+        resolutionNote: resolveTicketDto.resolution_note,
+        resolvedAt: new Date(),
+      },
+    });
 
-  return ticket;
-}
-async reopen(id: string, reopenTicketDto: ReopenTicketDto) {
-  const ticket = await this.prisma.ticket.update({
-    where: { id },
-    data: {
-      status: 'in_progress',
-    },
-  });
+    await this.prisma.ticketActivity.create({
+      data: {
+        ticketId: id,
+        type: 'resolution',
+        actor: 'system',
+        content: resolveTicketDto.resolution_note,
+      },
+    });
 
-  await this.prisma.ticketActivity.create({
-    data: {
-      ticketId: id,
-      type: 'reopen',
-      actor: 'requester',
-      content: reopenTicketDto.reason,
-    },
-  });
+    return ticket;
+  }
 
-  return ticket;
-}
-async addComment(id: string, createCommentDto: CreateCommentDto) {
-  return this.prisma.ticketActivity.create({
-    data: {
-      ticketId: id,
-      type: 'comment',
-      actor: createCommentDto.actor,
-      content: createCommentDto.content,
-    },
-  });
-}
+  async reopen(id: string, reopenTicketDto: ReopenTicketDto) {
+    const ticket = await this.prisma.ticket.update({
+      where: { id },
+      data: {
+        status: 'in_progress',
+      },
+    });
+
+    await this.prisma.ticketActivity.create({
+      data: {
+        ticketId: id,
+        type: 'reopen',
+        actor: 'requester',
+        content: reopenTicketDto.reason,
+      },
+    });
+
+    return ticket;
+  }
+
+  async addComment(id: string, createCommentDto: CreateCommentDto) {
+    return this.prisma.ticketActivity.create({
+      data: {
+        ticketId: id,
+        type: 'comment',
+        actor: createCommentDto.actor,
+        content: createCommentDto.content,
+      },
+    });
+  }
+
+  /*
+   * =========================================================
+   * TICKET MESSAGE / CONVERSATION
+   * =========================================================
+   */
+
+  async getTicketConversation(
+    ticketId: string,
+    currentUser: any,
+  ): Promise<TicketConversationResponseDto> {
+    const ticket = await this.prisma.ticket.findUnique({
+      where: {
+        id: ticketId,
+      },
+      include: {
+        messages: {
+          orderBy: {
+            createdAt: 'asc',
+          },
+        },
+      },
+    });
+
+    if (!ticket) {
+      throw new NotFoundException('Ticket tidak ditemukan');
+    }
+
+    // User hanya boleh melihat tiket miliknya sendiri
+    if (
+      currentUser.role === 'user' &&
+      ticket.requesterEmail !== currentUser.email
+    ) {
+      throw new NotFoundException('Ticket tidak ditemukan');
+    }
+
+    const unreadCount = ticket.messages.filter(
+      (message) =>
+        !message.isRead &&
+        message.senderId !== currentUser.id,
+    ).length;
+
+    const lastMessage =
+      ticket.messages[ticket.messages.length - 1];
+
+    return {
+      ticketId: ticket.id,
+      ticketSubject: ticket.subject,
+      ticketStatus: ticket.status,
+      canUserReply: !['closed', 'resolved'].includes(ticket.status),
+      lastMessageAt:
+        lastMessage?.createdAt || ticket.createdAt,
+      unreadCount,
+      messages: ticket.messages as TicketMessageResponseDto[],
+    };
+  }
+
+  async sendMessage(
+    createMessageDto: CreateTicketMessageDto,
+    currentUser: any,
+  ) {
+    const ticket = await this.prisma.ticket.findUnique({
+      where: {
+        id: createMessageDto.ticketId,
+      },
+    });
+
+    if (!ticket) {
+      throw new NotFoundException('Ticket tidak ditemukan');
+    }
+
+    // User hanya boleh mengirim pesan pada tiket miliknya
+    if (
+      currentUser.role === 'user' &&
+      ticket.requesterEmail !== currentUser.email
+    ) {
+      throw new NotFoundException('Ticket tidak ditemukan');
+    }
+
+    // Ticket yang sudah closed tidak boleh menerima pesan
+    if (ticket.status === 'closed') {
+      throw new Error(
+        'Ticket sudah ditutup dan tidak dapat dibalas',
+      );
+    }
+
+    const sender = await this.prisma.user.findUnique({
+      where: {
+        id: currentUser.id,
+      },
+    });
+
+    if (!sender) {
+      throw new NotFoundException('User tidak ditemukan');
+    }
+
+    const message = await this.prisma.ticketMessage.create({
+      data: {
+        ticketId: ticket.id,
+        senderId: sender.id,
+        senderRole: sender.role,
+        senderName: sender.name,
+        senderEmail: sender.email,
+        message: createMessageDto.message,
+      },
+    });
+
+    return message;
+  }
+
+  async getUnreadCount(currentUser: any): Promise<number> {
+    const where: any = {
+      isRead: false,
+      senderId: {
+        not: currentUser.id,
+      },
+    };
+
+    // User hanya menghitung pesan dari tiket miliknya
+    if (currentUser.role === 'user') {
+      where.ticket = {
+        requesterEmail: currentUser.email,
+      };
+    }
+
+    return this.prisma.ticketMessage.count({
+      where,
+    });
+  }
+
+  async markMessagesAsRead(
+    ticketId: string,
+    currentUser: any,
+  ) {
+    const ticket = await this.prisma.ticket.findUnique({
+      where: {
+        id: ticketId,
+      },
+    });
+
+    if (!ticket) {
+      throw new NotFoundException('Ticket tidak ditemukan');
+    }
+
+    // User hanya boleh mengakses tiket miliknya
+    if (
+      currentUser.role === 'user' &&
+      ticket.requesterEmail !== currentUser.email
+    ) {
+      throw new NotFoundException('Ticket tidak ditemukan');
+    }
+
+    await this.prisma.ticketMessage.updateMany({
+      where: {
+        ticketId,
+        senderId: {
+          not: currentUser.id,
+        },
+        isRead: false,
+      },
+      data: {
+        isRead: true,
+      },
+    });
+
+    return {
+      message: 'Pesan berhasil ditandai sudah dibaca',
+    };
+  }
+
+  async getTicketsWithMessages(currentUser: any) {
+    const where: any = {
+      messages: {
+        some: {},
+      },
+    };
+
+    // User hanya melihat tiket miliknya
+    if (currentUser.role === 'user') {
+      where.requesterEmail = currentUser.email;
+    }
+
+    const tickets = await this.prisma.ticket.findMany({
+      where,
+      include: {
+        messages: {
+          orderBy: {
+            createdAt: 'desc',
+          },
+          take: 1,
+        },
+      },
+      orderBy: {
+        updatedAt: 'desc',
+      },
+    });
+
+    return tickets.map((ticket) => ({
+      ticketId: ticket.id,
+      ticketNumber: ticket.ticketNumber,
+      subject: ticket.subject,
+      status: ticket.status,
+      lastMessage: ticket.messages[0] || null,
+      unreadCount: 0,
+    }));
+  }
+
+  /*
+   * =========================================================
+   * LAINNYA
+   * =========================================================
+   */
+
   remove(id: string) {
     return this.prisma.ticket.delete({
       where: { id },
@@ -278,7 +504,10 @@ async addComment(id: string, createCommentDto: CreateCommentDto) {
     };
   }
 
-  async submitSatisfaction(id: string, dto: SubmitSatisfactionDto) {
+  async submitSatisfaction(
+    id: string,
+    dto: SubmitSatisfactionDto,
+  ) {
     const { rating, comment } = dto;
 
     const ticket = await this.prisma.ticket.findUnique({
@@ -296,6 +525,7 @@ async addComment(id: string, createCommentDto: CreateCommentDto) {
           satisfactionRating: rating,
         },
       }),
+
       this.prisma.ticketActivity.create({
         data: {
           ticketId: id,
