@@ -99,8 +99,9 @@ model Ticket {
   resolvedAt DateTime?
   closedAt   DateTime?
 
-  activities TicketActivity[]
-  messages   TicketMessage[]
+  activities  TicketActivity[]
+  messages    TicketMessage[]
+  attachments TicketAttachment[]
 }
 
 model TicketActivity {
@@ -134,4 +135,20 @@ model TicketMessage {
   @@index([createdAt])
   @@index([senderRole])
   @@map("ticket_messages")
+}
+
+model TicketAttachment {
+  id        String   @id @default(uuid()) @db.Uuid
+
+  ticketId  String   @db.Uuid
+  ticket    Ticket   @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+
+  fileName  String
+  fileUrl   String
+  mimeType  String
+  fileSize  Int
+
+  createdAt DateTime @default(now())
+
+  @@index([ticketId])
 }

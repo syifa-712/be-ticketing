@@ -9,22 +9,33 @@ import {
   Query,
   UseGuards,
   Request,
+  UploadedFile,
+  UseInterceptors,
 } from '@nestjs/common';
+
+import { FileInterceptor } from '@nestjs/platform-express';
 
 import { TicketsService } from './tickets.service';
 
 import { CreateTicketDto } from './dto/create-ticket.dto';
+
 import { UpdateTicketDto } from './dto/update-ticket.dto';
+
 import { SubmitSatisfactionDto } from './dto/submit-satisfaction.dto';
+
 import { AssignTicketDto } from './dto/assign-ticket.dto';
+
 import { EscalateTicketDto } from './dto/escalate-ticket.dto';
+
 import { ResolveTicketDto } from './dto/resolve-ticket.dto';
+
 import { ReopenTicketDto } from './dto/reopen-ticket.dto';
+
 import { CreateCommentDto } from './dto/create-comment.dto';
+
 import { CreateTicketMessageDto } from './dto/ticket-message.dto';
 
 import { JwtAuthGuard } from '../auth/jwt-auth/jwt-auth.guard';
-
 @Controller('tickets')
 export class TicketsController {
   constructor(private readonly ticketsService: TicketsService) {}
@@ -34,9 +45,16 @@ export class TicketsController {
   // =========================================================
 
   @Post()
-  create(@Body() createTicketDto: CreateTicketDto) {
-    return this.ticketsService.create(createTicketDto);
-  }
+@UseInterceptors(FileInterceptor('file'))
+create(
+  @Body() createTicketDto: CreateTicketDto,
+  @UploadedFile() file?: any,
+) {
+  return this.ticketsService.create(
+    createTicketDto,
+    file,
+  );
+}
 
   // =========================================================
   // SATISFACTION

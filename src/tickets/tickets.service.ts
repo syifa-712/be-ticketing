@@ -1,5 +1,7 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { Prisma, Status } from '@prisma/client';
+import { mkdir, writeFile } from 'fs/promises';
+import { join } from 'path';
 import { PrismaService } from '../prisma/prisma.service';
 import { MailService } from '../mail/mail.service';
 import { SlaService } from '../sla/sla.service';
@@ -27,7 +29,11 @@ export class TicketsService {
     private slaService: SlaService,
   ) {}
 
-  async create(createTicketDto: CreateTicketDto) {
+  async create(
+    createTicketDto: CreateTicketDto,
+    file?: any,
+  ) {
+    console.log('FILE:', file);
     const now = new Date();
 
     const date =
@@ -45,6 +51,53 @@ export class TicketsService {
         ticketNumber,
       },
     });
+
+    // =========================================================
+    // ATTACHMENT
+    // =========================================================
+
+    if (file) {
+      const allowedMimeTypes = [
+        'image/jpeg',
+        'image/png',
+        'image/webp',
+      ];
+
+      const maxFileSize = 5 * 1024 * 1024; // 5 MB
+
+      if (!allowedMimeTypes.includes(file.mimetype)) {
+        throw new BadRequestException(
+          'Tipe file tidak diperbolehkan. Gunakan JPG, JPEG, PNG, atau WEBP.',
+        );
+      }
+
+      if (file.size > maxFileSize) {
+        throw new BadRequestException(
+          'Ukuran file terlalu besar. Maksimal 5 MB.',
+        );
+      }
+
+      const uploadDir = join(process.cwd(), 'uploads');
+
+      await mkdir(uploadDir, {
+        recursive: true,
+      });
+
+      const fileName = `${Date.now()}-${file.originalname}`;
+      const filePath = join(uploadDir, fileName);
+
+      await writeFile(filePath, file.buffer);
+
+      await this.prisma.ticketAttachment.create({
+        data: {
+          ticketId: ticket.id,
+          fileName: file.originalname,
+          fileUrl: `/uploads/${fileName}`,
+          mimeType: file.mimetype,
+          fileSize: file.size,
+        },
+      });
+    }
 
     await this.mailService.sendTicketCreated(ticket);
 
@@ -111,6 +164,11 @@ export class TicketsService {
       where: { id },
       include: {
         activities: {
+          orderBy: {
+            createdAt: 'asc',
+          },
+        },
+        attachments: {
           orderBy: {
             createdAt: 'asc',
           },
