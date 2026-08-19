@@ -1,7 +1,7 @@
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
 import { Prisma, Status } from '@prisma/client';
-import { mkdir, writeFile } from 'fs/promises';
-import { join } from 'path';
+import { mkdir, writeFile, unlink } from 'fs/promises';
+import { basename, join } from 'path';
 import { PrismaService } from '../prisma/prisma.service';
 import { MailService } from '../mail/mail.service';
 import { SlaService } from '../sla/sla.service';
@@ -34,6 +34,7 @@ export class TicketsService {
     file?: any,
   ) {
     console.log('FILE:', file);
+
     const now = new Date();
 
     const date =
@@ -344,7 +345,6 @@ export class TicketsService {
       throw new NotFoundException('Ticket tidak ditemukan');
     }
 
-    // User hanya boleh melihat tiket miliknya sendiri
     if (
       currentUser.role === 'user' &&
       ticket.requesterEmail !== currentUser.email
@@ -387,7 +387,6 @@ export class TicketsService {
       throw new NotFoundException('Ticket tidak ditemukan');
     }
 
-    // User hanya boleh mengirim pesan pada tiket miliknya
     if (
       currentUser.role === 'user' &&
       ticket.requesterEmail !== currentUser.email
@@ -395,7 +394,6 @@ export class TicketsService {
       throw new NotFoundException('Ticket tidak ditemukan');
     }
 
-    // Ticket yang sudah closed tidak boleh menerima pesan
     if (ticket.status === 'closed') {
       throw new Error(
         'Ticket sudah ditutup dan tidak dapat dibalas',
@@ -434,7 +432,6 @@ export class TicketsService {
       },
     };
 
-    // User hanya menghitung pesan dari tiket miliknya
     if (currentUser.role === 'user') {
       where.ticket = {
         requesterEmail: currentUser.email,
@@ -460,7 +457,6 @@ export class TicketsService {
       throw new NotFoundException('Ticket tidak ditemukan');
     }
 
-    // User hanya boleh mengakses tiket miliknya
     if (
       currentUser.role === 'user' &&
       ticket.requesterEmail !== currentUser.email
@@ -493,7 +489,6 @@ export class TicketsService {
       },
     };
 
-    // User hanya melihat tiket miliknya
     if (currentUser.role === 'user') {
       where.requesterEmail = currentUser.email;
     }
@@ -525,6 +520,209 @@ export class TicketsService {
 
   /*
    * =========================================================
+   * ATTACHMENT CRUD
+   * =========================================================
+   */
+
+  // CREATE ATTACHMENT
+  async createAttachment(ticketId: string, file?: any) {
+    const ticket = await this.prisma.ticket.findUnique({
+      where: { id: ticketId },
+    });
+
+    if (!ticket) {
+      throw new NotFoundException('Ticket tidak ditemukan');
+    }
+
+    if (!file) {
+      throw new BadRequestException('File wajib diupload');
+    }
+
+    const allowedMimeTypes = [
+      'image/jpeg',
+      'image/png',
+      'image/webp',
+    ];
+
+    const maxFileSize = 5 * 1024 * 1024;
+
+    if (!allowedMimeTypes.includes(file.mimetype)) {
+      throw new BadRequestException(
+        'Tipe file tidak diperbolehkan. Gunakan JPG, JPEG, PNG, atau WEBP.',
+      );
+    }
+
+    if (file.size > maxFileSize) {
+      throw new BadRequestException(
+        'Ukuran file terlalu besar. Maksimal 5 MB.',
+      );
+    }
+
+    const uploadDir = join(process.cwd(), 'uploads');
+
+    await mkdir(uploadDir, {
+      recursive: true,
+    });
+
+    const originalName = basename(file.originalname);
+    const fileName = `${Date.now()}-${originalName}`;
+    const filePath = join(uploadDir, fileName);
+
+    await writeFile(filePath, file.buffer);
+
+    return this.prisma.ticketAttachment.create({
+      data: {
+        ticketId,
+        fileName: originalName,
+        fileUrl: `/uploads/${fileName}`,
+        mimeType: file.mimetype,
+        fileSize: file.size,
+      },
+    });
+  }
+
+  // READ ATTACHMENTS
+  async getAttachments(ticketId: string) {
+    const ticket = await this.prisma.ticket.findUnique({
+      where: { id: ticketId },
+    });
+
+    if (!ticket) {
+      throw new NotFoundException('Ticket tidak ditemukan');
+    }
+
+    return this.prisma.ticketAttachment.findMany({
+      where: {
+        ticketId,
+      },
+      orderBy: {
+        createdAt: 'asc',
+      },
+    });
+  }
+
+  // UPDATE ATTACHMENT
+  async updateAttachment(
+    ticketId: string,
+    attachmentId: string,
+    file?: any,
+  ) {
+    const attachment =
+      await this.prisma.ticketAttachment.findFirst({
+        where: {
+          id: attachmentId,
+          ticketId,
+        },
+      });
+
+    if (!attachment) {
+      throw new NotFoundException(
+        'Attachment tidak ditemukan',
+      );
+    }
+
+    if (!file) {
+      throw new BadRequestException(
+        'File baru wajib diupload',
+      );
+    }
+
+    const allowedMimeTypes = [
+      'image/jpeg',
+      'image/png',
+      'image/webp',
+    ];
+
+    const maxFileSize = 5 * 1024 * 1024;
+
+    if (!allowedMimeTypes.includes(file.mimetype)) {
+      throw new BadRequestException(
+        'Tipe file tidak diperbolehkan. Gunakan JPG, JPEG, PNG, atau WEBP.',
+      );
+    }
+
+    if (file.size > maxFileSize) {
+      throw new BadRequestException(
+        'Ukuran file terlalu besar. Maksimal 5 MB.',
+      );
+    }
+
+    const uploadDir = join(process.cwd(), 'uploads');
+
+    await mkdir(uploadDir, {
+      recursive: true,
+    });
+
+    const originalName = basename(file.originalname);
+    const fileName = `${Date.now()}-${originalName}`;
+    const filePath = join(uploadDir, fileName);
+
+    await writeFile(filePath, file.buffer);
+
+    const oldFileName = basename(attachment.fileUrl);
+    const oldFilePath = join(uploadDir, oldFileName);
+
+    try {
+      await unlink(oldFilePath);
+    } catch {
+      // File lama tidak ditemukan, lanjutkan
+    }
+
+    return this.prisma.ticketAttachment.update({
+      where: {
+        id: attachmentId,
+      },
+      data: {
+        fileName: originalName,
+        fileUrl: `/uploads/${fileName}`,
+        mimeType: file.mimetype,
+        fileSize: file.size,
+      },
+    });
+  }
+
+  // DELETE ATTACHMENT
+  async deleteAttachment(
+    ticketId: string,
+    attachmentId: string,
+  ) {
+    const attachment =
+      await this.prisma.ticketAttachment.findFirst({
+        where: {
+          id: attachmentId,
+          ticketId,
+        },
+      });
+
+    if (!attachment) {
+      throw new NotFoundException(
+        'Attachment tidak ditemukan',
+      );
+    }
+
+    const uploadDir = join(process.cwd(), 'uploads');
+    const fileName = basename(attachment.fileUrl);
+    const filePath = join(uploadDir, fileName);
+
+    try {
+      await unlink(filePath);
+    } catch {
+      // File tidak ada, tetap hapus data database
+    }
+
+    await this.prisma.ticketAttachment.delete({
+      where: {
+        id: attachmentId,
+      },
+    });
+
+    return {
+      message: 'Attachment berhasil dihapus',
+    };
+  }
+
+  /*
+   * =========================================================
    * LAINNYA
    * =========================================================
    */
@@ -535,32 +733,55 @@ export class TicketsService {
     });
   }
 
-  async track(ticketNumber: string, requesterEmail: string) {
-    const ticket = await this.prisma.ticket.findFirst({
-      where: {
-        ticketNumber,
-        requesterEmail,
-      },
-      include: {
-        activities: {
-          orderBy: {
-            createdAt: 'asc',
-          },
+async track(ticketNumber: string, requesterEmail: string) {
+  const ticket = await this.prisma.ticket.findFirst({
+    where: {
+      ticketNumber,
+      requesterEmail,
+    },
+    include: {
+      activities: {
+        orderBy: {
+          createdAt: 'asc',
         },
       },
-    });
+    },
+  });
 
-    if (!ticket) {
-      return {
-        message: 'Ticket tidak ditemukan',
-      };
-    }
-
+  if (!ticket) {
     return {
-      status: ticket.status,
-      history: ticket.activities,
+      message: 'Ticket tidak ditemukan',
     };
   }
+
+  return {
+    id: ticket.id,
+
+    ticket_number: ticket.ticketNumber,
+
+    subject: ticket.subject,
+
+    description: ticket.description,
+
+    priority: ticket.priority,
+
+    status: ticket.status,
+
+    created_at: ticket.createdAt,
+
+    updated_at: ticket.updatedAt,
+
+    requester_name: ticket.requesterName,
+
+    requester_email: ticket.requesterEmail,
+
+    assigned_to: ticket.assignedToId,
+
+    feedback: "",
+
+    history: ticket.activities || [],
+  };
+}
 
   async submitSatisfaction(
     id: string,

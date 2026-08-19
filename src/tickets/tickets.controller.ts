@@ -18,24 +18,17 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import { TicketsService } from './tickets.service';
 
 import { CreateTicketDto } from './dto/create-ticket.dto';
-
 import { UpdateTicketDto } from './dto/update-ticket.dto';
-
 import { SubmitSatisfactionDto } from './dto/submit-satisfaction.dto';
-
 import { AssignTicketDto } from './dto/assign-ticket.dto';
-
 import { EscalateTicketDto } from './dto/escalate-ticket.dto';
-
 import { ResolveTicketDto } from './dto/resolve-ticket.dto';
-
 import { ReopenTicketDto } from './dto/reopen-ticket.dto';
-
 import { CreateCommentDto } from './dto/create-comment.dto';
-
 import { CreateTicketMessageDto } from './dto/ticket-message.dto';
 
 import { JwtAuthGuard } from '../auth/jwt-auth/jwt-auth.guard';
+
 @Controller('tickets')
 export class TicketsController {
   constructor(private readonly ticketsService: TicketsService) {}
@@ -45,16 +38,16 @@ export class TicketsController {
   // =========================================================
 
   @Post()
-@UseInterceptors(FileInterceptor('file'))
-create(
-  @Body() createTicketDto: CreateTicketDto,
-  @UploadedFile() file?: any,
-) {
-  return this.ticketsService.create(
-    createTicketDto,
-    file,
-  );
-}
+  @UseInterceptors(FileInterceptor('file'))
+  create(
+    @Body() createTicketDto: CreateTicketDto,
+    @UploadedFile() file?: any,
+  ) {
+    return this.ticketsService.create(
+      createTicketDto,
+      file,
+    );
+  }
 
   // =========================================================
   // SATISFACTION
@@ -182,6 +175,60 @@ create(
   @Get(':id/sla')
   getSla(@Param('id') id: string) {
     return this.ticketsService.getSla(id);
+  }
+
+  // =========================================================
+  // ATTACHMENT CRUD
+  // =========================================================
+
+  // CREATE ATTACHMENT
+  @UseGuards(JwtAuthGuard)
+  @Post(':id/attachments')
+  @UseInterceptors(FileInterceptor('file'))
+  createAttachment(
+    @Param('id') id: string,
+    @UploadedFile() file?: any,
+  ) {
+    return this.ticketsService.createAttachment(
+      id,
+      file,
+    );
+  }
+
+  // READ ATTACHMENTS
+  @UseGuards(JwtAuthGuard)
+  @Get(':id/attachments')
+  getAttachments(@Param('id') id: string) {
+    return this.ticketsService.getAttachments(id);
+  }
+
+  // UPDATE ATTACHMENT
+  @UseGuards(JwtAuthGuard)
+  @Patch(':id/attachments/:attachmentId')
+  @UseInterceptors(FileInterceptor('file'))
+  updateAttachment(
+    @Param('id') id: string,
+    @Param('attachmentId') attachmentId: string,
+    @UploadedFile() file?: any,
+  ) {
+    return this.ticketsService.updateAttachment(
+      id,
+      attachmentId,
+      file,
+    );
+  }
+
+  // DELETE ATTACHMENT
+  @UseGuards(JwtAuthGuard)
+  @Delete(':id/attachments/:attachmentId')
+  deleteAttachment(
+    @Param('id') id: string,
+    @Param('attachmentId') attachmentId: string,
+  ) {
+    return this.ticketsService.deleteAttachment(
+      id,
+      attachmentId,
+    );
   }
 
   // =========================================================
