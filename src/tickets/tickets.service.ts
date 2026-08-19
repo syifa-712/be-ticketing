@@ -733,13 +733,21 @@ export class TicketsService {
     });
   }
 
-async track(ticketNumber: string, requesterEmail: string) {
+async track(
+  ticketNumber: string,
+  requesterEmail: string,
+) {
   const ticket = await this.prisma.ticket.findFirst({
     where: {
       ticketNumber,
       requesterEmail,
     },
     include: {
+      messages: {
+        orderBy: {
+          createdAt: 'asc',
+        },
+      },
       activities: {
         orderBy: {
           createdAt: 'asc',
@@ -749,14 +757,22 @@ async track(ticketNumber: string, requesterEmail: string) {
   });
 
   if (!ticket) {
-    return {
-      message: 'Ticket tidak ditemukan',
-    };
+    throw new NotFoundException(
+      'Ticket tidak ditemukan',
+    );
   }
 
-  return {
-    id: ticket.id,
+  const adminMessages = ticket.messages
+    .filter(
+      (msg) =>
+        msg.senderRole === 'admin',
+    )
+    .map((msg) => ({
+      message: msg.message,
+      created_at: msg.createdAt,
+    }));
 
+  return {
     ticket_number: ticket.ticketNumber,
 
     subject: ticket.subject,
@@ -777,9 +793,14 @@ async track(ticketNumber: string, requesterEmail: string) {
 
     assigned_to: ticket.assignedToId,
 
-    feedback: "",
+    // INI TAMBAHAN
+    feedback: adminMessages
+      .map((item) => item.message)
+      .join('\n\n'),
 
-    history: ticket.activities || [],
+    messages: adminMessages,
+
+    history: ticket.activities,
   };
 }
 
