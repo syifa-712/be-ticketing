@@ -723,6 +723,89 @@ export class TicketsService {
 
   /*
    * =========================================================
+   * TRACK TICKET - PERBAIKAN DENGAN ATTACHMENTS
+   * =========================================================
+   */
+
+  async track(
+    ticketNumber: string,
+    requesterEmail: string,
+  ) {
+    const ticket = await this.prisma.ticket.findFirst({
+      where: {
+        ticketNumber,
+        requesterEmail,
+      },
+      include: {
+        messages: {
+          orderBy: {
+            createdAt: 'asc',
+          },
+        },
+        activities: {
+          orderBy: {
+            createdAt: 'asc',
+          },
+        },
+        attachments: {  // <-- TAMBAHKAN INI
+          orderBy: {
+            createdAt: 'asc',
+          },
+        },
+      },
+    });
+
+    if (!ticket) {
+      throw new NotFoundException(
+        'Ticket tidak ditemukan',
+      );
+    }
+
+    const adminMessages = ticket.messages
+      .filter(
+        (msg) =>
+          msg.senderRole === 'admin',
+      )
+      .map((msg) => ({
+        message: msg.message,
+        created_at: msg.createdAt,
+      }));
+
+    return {
+      ticket_number: ticket.ticketNumber,
+
+      subject: ticket.subject,
+
+      description: ticket.description,
+
+      priority: ticket.priority,
+
+      status: ticket.status,
+
+      created_at: ticket.createdAt,
+
+      updated_at: ticket.updatedAt,
+
+      requester_name: ticket.requesterName,
+
+      requester_email: ticket.requesterEmail,
+
+      assigned_to: ticket.assignedToId,
+
+      feedback: adminMessages
+        .map((item) => item.message)
+        .join('\n\n'),
+
+      messages: adminMessages,
+
+      history: ticket.activities,
+
+      attachments: ticket.attachments, // <-- TAMBAHKAN INI
+    };
+  }
+
+  /*
+   * =========================================================
    * LAINNYA
    * =========================================================
    */
@@ -732,77 +815,6 @@ export class TicketsService {
       where: { id },
     });
   }
-
-async track(
-  ticketNumber: string,
-  requesterEmail: string,
-) {
-  const ticket = await this.prisma.ticket.findFirst({
-    where: {
-      ticketNumber,
-      requesterEmail,
-    },
-    include: {
-      messages: {
-        orderBy: {
-          createdAt: 'asc',
-        },
-      },
-      activities: {
-        orderBy: {
-          createdAt: 'asc',
-        },
-      },
-    },
-  });
-
-  if (!ticket) {
-    throw new NotFoundException(
-      'Ticket tidak ditemukan',
-    );
-  }
-
-  const adminMessages = ticket.messages
-    .filter(
-      (msg) =>
-        msg.senderRole === 'admin',
-    )
-    .map((msg) => ({
-      message: msg.message,
-      created_at: msg.createdAt,
-    }));
-
-  return {
-    ticket_number: ticket.ticketNumber,
-
-    subject: ticket.subject,
-
-    description: ticket.description,
-
-    priority: ticket.priority,
-
-    status: ticket.status,
-
-    created_at: ticket.createdAt,
-
-    updated_at: ticket.updatedAt,
-
-    requester_name: ticket.requesterName,
-
-    requester_email: ticket.requesterEmail,
-
-    assigned_to: ticket.assignedToId,
-
-    // INI TAMBAHAN
-    feedback: adminMessages
-      .map((item) => item.message)
-      .join('\n\n'),
-
-    messages: adminMessages,
-
-    history: ticket.activities,
-  };
-}
 
   async submitSatisfaction(
     id: string,
