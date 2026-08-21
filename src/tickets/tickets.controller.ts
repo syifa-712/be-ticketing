@@ -126,6 +126,11 @@ export class TicketsController {
       req.user,
     );
   }
+  
+  @Get('feedback/list')
+  getFeedbackList() {
+    return this.ticketsService.getFeedbackList();
+  }
 
   @UseGuards(JwtAuthGuard)
   @Get(':id/conversation')

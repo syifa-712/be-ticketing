@@ -868,4 +868,20 @@ export class TicketsService {
       ...this.slaService.getSlaInfo(ticket),
     };
   }
+    async getFeedbackList() {
+    const data = await this.prisma.ticket.findMany({
+      where: {
+        satisfactionRating: { not: null },
+      },
+      select: {
+        id: true,
+        ticketNumber: true,
+        subject: true,
+        requesterName: true,
+        satisfactionRating: true,
+      },
+      orderBy: { updatedAt: 'desc' },
+    });
+    return { data };
+  }
 }
